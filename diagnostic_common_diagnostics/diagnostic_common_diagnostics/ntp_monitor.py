@@ -34,6 +34,7 @@
 
 import socket
 import sys
+import threading
 
 import diagnostic_updater as DIAG
 
@@ -83,11 +84,19 @@ class NTPMonitor(Node):
         self.self_stat.hardware_id = self.hostname
         self.self_stat.values = []
 
+        self.mutex = threading.Lock()
         self.pub = self.create_publisher(
             DIAG.DiagnosticArray, '/diagnostics', 10)
 
         # we need to periodically republish this
+        self.current_msg = None
+        self.pubtimer = self.create_timer(1/frequency, self.pubCB)
         self.checktimer = self.create_timer(1/frequency, self.checkCB)
+
+    def pubCB(self):
+        with self.mutex:
+            if self.current_msg:
+                self.pub.publish(self.current_msg)
 
     def checkCB(self):
         new_msg = DIAG.DiagnosticArray()
@@ -102,7 +111,8 @@ class NTPMonitor(Node):
             if st is not None:
                 new_msg.status.append(st)
 
-        self.pub.publish(new_msg)
+        with self.mutex:
+            self.current_msg = new_msg
 
     def ntp_diag(self, st):
         """
