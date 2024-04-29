@@ -34,7 +34,6 @@
 
 import socket
 import sys
-import threading
 
 import diagnostic_updater as DIAG
 
@@ -52,6 +51,8 @@ class NTPMonitor(Node):
                  do_self_test=True):
         """Initialize the NTPMonitor."""
         super().__init__(__class__.__name__)
+        self.declare_parameter('frequency', 10.0)
+        frequency = self.get_parameter('frequency').get_parameter_value().double_value
 
         self.ntp_hostname = ntp_hostname
         self.ntp_port = ntp_port
@@ -81,22 +82,15 @@ class NTPMonitor(Node):
         self.self_stat.hardware_id = self.hostname
         self.self_stat.values = []
 
-        self.mutex = threading.Lock()
         self.pub = self.create_publisher(
             DIAG.DiagnosticArray, '/diagnostics', 10)
 
         # we need to periodically republish this
-        self.current_msg = None
-        self.pubtimer = self.create_timer(0.1, self.pubCB)
-        self.checktimer = self.create_timer(0.1, self.checkCB)
-
-    def pubCB(self):
-        with self.mutex:
-            if self.current_msg:
-                self.pub.publish(self.current_msg)
+        self.checktimer = self.create_timer(1/frequency, self.checkCB)
 
     def checkCB(self):
         new_msg = DIAG.DiagnosticArray()
+        new_msg.header.stamp = self.get_clock().now().to_msg()
 
         st = self.ntp_diag(self.stat)
         if st is not None:
@@ -107,8 +101,7 @@ class NTPMonitor(Node):
             if st is not None:
                 new_msg.status.append(st)
 
-        with self.mutex:
-            self.current_msg = new_msg
+        self.pub.publish(new_msg)
 
     def ntp_diag(self, st):
         """
@@ -161,7 +154,7 @@ class NTPMonitor(Node):
 
 def ntp_monitor_main(argv=sys.argv[1:]):
     # filter out ROS args
-    argv = [a for a in argv if not a.startswith('__') and not a == '--ros-args' and not a == '-r']
+    argv = argv[:argv.index('--ros-args')] if '--ros-args' in argv else argv
 
     import argparse
     parser = argparse.ArgumentParser()
