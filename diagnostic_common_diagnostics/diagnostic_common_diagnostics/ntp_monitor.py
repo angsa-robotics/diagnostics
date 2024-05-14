@@ -51,7 +51,6 @@ class NTPMonitor(Node):
                  diag_hostname=None, error_offset=5000000,
                  do_self_test=True):
         """Initialize the NTPMonitor."""
-
         super().__init__(__class__.__name__)
         self.declare_parameter('frequency', 10.0)
         frequency = self.get_parameter('frequency').get_parameter_value().double_value
